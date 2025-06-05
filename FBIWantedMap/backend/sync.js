@@ -8,6 +8,7 @@ async function main() {
   await collectAllWanted(baseUrl, pages);
   console.log("gotowe dane:", allPersons);
   // te dane mozna zapisac pozniej do db
+  exportToJsonFile(allPersons);
 }
 
 function delay(ms) {
@@ -39,9 +40,25 @@ async function collectAllWanted(url, totalPages) {
       field_offices: person.field_offices || 'Unknown'
     }));
 
+    console.log(JSON.stringify(filtered));
+
     allPersons.push(...filtered);
     console.log(`strona ${i} – osób dodanych: ${filtered.length}`);
     await delay(2000); // przerwa, żeby nie zajechać api
     }
 
+}
+
+function exportToJsonFile(data) {
+  const fileName = "dbtest.json";
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+
+  URL.revokeObjectURL(url);
 }
