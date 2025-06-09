@@ -1,118 +1,190 @@
-// Inicjalizacja mapy i ustawienie widoku na środek USA (szerokość geograficzna, długość geograficzna, zoom)
-const map = L.map('map').setView([37.8, -96], 4);
+let exampleData = {}; // Obiekt przechowujący liczbę przypadków na stan
 
-// Dodanie warstwy mapy bazowej z OpenStreetMap
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors' // przypisanie autorstwa
-}).addTo(map);
-
-// Przykładowe dane liczbowego "wyniku" czyli liczby osób poszukiwanych dla każdego stanu USA
-const exampleData = {
-    "Alabama": 0, "Alaska": 0, "Arizona": 0, "Arkansas": 0, "California": 100,
-    "Colorado": 0, "Connecticut": 0, "Delaware": 0, "Florida": 0, "Georgia": 0,
-    "Hawaii": 0, "Idaho": 0, "Illinois": 0, "Indiana": 0, "Iowa": 0,
-    "Kansas": 0, "Kentucky": 0, "Louisiana": 0, "Maine": 0, "Maryland": 0,
-    "Massachusetts": 0, "Michigan": 0, "Minnesota": 0, "Mississippi": 0, "Missouri": 25,
-    "Montana": 0, "Nebraska": 0, "Nevada": 0, "New Hampshire": 0, "New Jersey": 0,
-    "New Mexico": 0, "New York": 75, "North Carolina": 0, "North Dakota": 0, "Ohio": 0,
-    "Oklahoma": 0, "Oregon": 0, "Pennsylvania": 0, "Rhode Island": 0, "South Carolina": 0,
-    "South Dakota": 0, "Tennessee": 0, "Texas": 80, "Utah": 0, "Vermont": 0,
-    "Virginia": 0, "Washington": 0, "West Virginia": 0, "Wisconsin": 0, "Wyoming": 0
+// === Mapowanie biur FBI na stany ===
+// Wykorzystywane do przypisania danych do właściwego stanu na mapie
+const fbiOfficeToState = {
+    "albany": "New York",
+    "albuquerque": "New Mexico",
+    "anchorage": "Alaska",
+    "atlanta": "Georgia",
+    "baltimore": "Maryland",
+    "birmingham": "Alabama",
+    "boston": "Massachusetts",
+    "buffalo": "New York",
+    "charlotte": "North Carolina",
+    "chicago": "Illinois",
+    "cincinnati": "Ohio",
+    "cleveland": "Ohio",
+    "columbia": "South Carolina",
+    "dallas": "Texas",
+    "denver": "Colorado",
+    "detroit": "Michigan",
+    "elpaso": "Texas",
+    "honolulu": "Hawaii",
+    "houston": "Texas",
+    "indianapolis": "Indiana",
+    "jackson": "Mississippi",
+    "jacksonville": "Florida",
+    "kansascity": "Missouri",
+    "knoxville": "Tennessee",
+    "lasvegas": "Nevada",
+    "littlerock": "Arkansas",
+    "losangeles": "California",
+    "louisville": "Kentucky",
+    "memphis": "Tennessee",
+    "miami": "Florida",
+    "milwaukee": "Wisconsin",
+    "minneapolis": "Minnesota",
+    "mobile": "Alabama",
+    "nashville": "Tennessee",
+    "newark": "New Jersey",
+    "newhaven": "Connecticut",
+    "neworleans": "Louisiana",
+    "newyork": "New York",
+    "norfolk": "Virginia",
+    "oklahomacity": "Oklahoma",
+    "omaha": "Nebraska",
+    "philadelphia": "Pennsylvania",
+    "phoenix": "Arizona",
+    "pittsburgh": "Pennsylvania",
+    "portland": "Oregon",
+    "richmond": "Virginia",
+    "sacramento": "California",
+    "saltlakecity": "Utah",
+    "sanantonio": "Texas",
+    "sandiego": "California",
+    "sanfrancisco": "California",
+    "sanjuan": "Puerto Rico",
+    "seattle": "Washington",
+    "springfield": "Illinois",
+    "stlouis": "Missouri",
+    "tampa": "Florida",
+    "washingtondc": "District of Columbia",
+    "idaho": "Idaho"
 };
 
-// Funkcja przypisująca kolor na podstawie wartości
-function getColor(value) {
-    return value > 80 ? '#800026' :
-        value > 60 ? '#BD0026' :
-            value > 40 ? '#E31A1C' :
-                value > 20 ? '#FC4E2A' :
-                    '#FFEDA0';
-}
+// === Funkcja: Pobieranie danych z Firestore ===
+async function fetchData() {
+    try {
+        console.log('Próba pobrania danych z Firestore...');
+        const response = await fetch('http://localhost:8080/api/test');
 
-// Stylowanie każdego stanu na podstawie danych
-function style(feature) {
-    const name = feature.properties.name;
-    const value = exampleData[name] || 0; // jeżeli brak danych, domyślnie 0
+        if (!response.ok) {
+            console.error('Błąd HTTP:', response.status, response.statusText);
+            throw new Error(`Błąd pobierania danych z Firestore: ${response.status} ${response.statusText}`);
+        }
 
-    return {
-        fillColor: getColor(value),  // kolor wypełnienia na podstawie wartości
-        weight: 2.5,                  // grubość obramowania
-        opacity: 1,                   // przezroczystość linii
-        color: '#333333',            // kolor obramowania
-        dashArray: '3',              // kreskowanie
-        fillOpacity: 0.4             // przezroczystość wypełnienia
-    };
-}
+        const data = await response.json();
+        console.log('Pobrano rekordów z Firestore:', data.length);
 
-// Funkcja podświetlająca stan po najechaniu kursorem
-function highlightFeature(e) {
-    const layer = e.target;
-    layer.setStyle({
-        weight: 4,
-        color: '#000',     // czarna obwódka
-        dashArray: '',
-        fillOpacity: 0.4
-    });
+        // Czyszczenie poprzednich danych
+        exampleData = {};
 
-    // przynoszenie warstwy na wierzch w niektórych przeglądarkach
-    if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
-        layer.bringToFront();
+        // === Przetwarzanie danych ===
+        for (const item of data) {
+            let state = null;
+
+            // Przypisanie stanu na podstawie biura FBI
+            if (item.field_offices && item.field_offices.length > 0 && item.field_offices[0] !== 'Unknown') {
+                const office = item.field_offices[0].toLowerCase();
+                state = fbiOfficeToState[office];
+            }
+
+            // Jeśli nie ma biura, używamy bezpośredniego pola `state`
+            if (!state && item.state && item.state !== 'Unknown') {
+                state = item.state;
+            }
+
+            // Jeśli stan istnieje, normalizujemy jego zapis i zliczamy
+            if (state) {
+                state = state.trim();
+                state = state
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                    .join(' ');
+
+                exampleData[state] = (exampleData[state] || 0) + 1;
+            }
+        }
+
+        console.log('Przetworzone dane:', exampleData);
+    } catch (err) {
+        console.error('Szczegóły błędu:', err);
+        exampleData = {};
     }
 }
 
-// Resetowanie stylu po usunięciu kursora z danego stanu
-function resetHighlight(e) {
-    geojson.resetStyle(e.target);
-}
+// === Inicjalizacja mapy i render ===
+(async function() {
+    await fetchData(); // Najpierw pobieramy dane z backendu
 
-let selectedState = null; // zmienna do przechowywania klikniętego stanu
+    const map = L.map('map').setView([37.8, -96], 4); // Inicjalizacja mapy z widokiem na USA
 
-// Funkcja przypisująca akcje do każdego stanu
-function onEachFeature(feature, layer) {
-    const name = feature.properties.name;
-    const value = exampleData[name] || 0;
+    // Warstwa kafelkowa (OpenStreetMap)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
 
-    // Dodanie podpowiedzi z nazwą stanu i wartością
-    layer.bindTooltip(`${name}: ${value}`);
+    // === Kolorowanie stanów w zależności od wartości ===
+    function getColor(value) {
+        return value > 20 ? '#800026' :
+               value > 15 ? '#BD0026' :
+               value > 10 ? '#E31A1C' :
+               value > 5  ? '#FC4E2A' :
+                            '#FFEDA0';
+    }
 
-    // Reakcje na zdarzenia myszki
-    layer.on({
-        mouseover: function (e) {
-            highlightFeature(e); // podświetl
-        },
-        mouseout: function (e) {
-            if (selectedState !== e.target) {
-                resetHighlight(e); // zresetuj, jeśli to nie zaznaczony stan
-            }
-        },
-        click: function (e) {
-            // Jeżeli wcześniej zaznaczony stan istnieje, zresetuj jego styl
-            if (selectedState && selectedState !== e.target) {
-                geojson.resetStyle(selectedState);
-            }
+    // Stylizacja warstwy geojson (czyli wygląd stanów)
+    function style(feature) {
+        const name = feature.properties.name;
+        const value = exampleData[name] || 0;
 
-            // Ustaw obecnie kliknięty stan jako zaznaczony
-            selectedState = e.target;
-            selectedState.setStyle({
-                weight: 4,
-                color: '#000',
-                dashArray: '',
-                fillOpacity: 0.4
-            });
+        return {
+            fillColor: getColor(value),
+            weight: 2,
+            opacity: 1,
+            color: '#666',
+            fillOpacity: 0.7
+        };
+    }
 
-            selectedState.bringToFront(); // przenieś na wierzch
-        }
-    });
-}
+    // Efekt podświetlenia po najechaniu myszą
+    function highlightFeature(e) {
+        const layer = e.target;
+        layer.setStyle({
+            weight: 3,
+            color: '#000',
+            fillOpacity: 0.7
+        });
+    }
 
-let geojson; // zmienna globalna do przechowywania warstwy stanów
+    // Reset stylu po opuszczeniu stanu
+    function resetHighlight(e) {
+        geojson.resetStyle(e.target);
+    }
 
-// Pobranie danych geojson z GitHub i dodanie ich do mapy
-fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
-    .then(res => res.json()) // konwersja odpowiedzi na JSON
-    .then(geojsonData => {
-        geojson = L.geoJson(geojsonData, {
-            style: style,             // przypisanie stylów
-            onEachFeature: onEachFeature // przypisanie interakcji
-        }).addTo(map); // dodanie do mapy
-    });
+    // Przypięcie tooltipów i zdarzeń do każdego stanu
+    function onEachFeature(feature, layer) {
+        const name = feature.properties.name;
+        const value = exampleData[name] || 0;
+
+        layer.bindTooltip(`${name}: ${value}`); // Pokazuje tooltip
+
+        layer.on({
+            mouseover: highlightFeature,
+            mouseout: resetHighlight
+        });
+    }
+
+    let geojson;
+
+    // === Pobranie danych GeoJSON i dodanie do mapy ===
+    fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
+        .then(res => res.json())
+        .then(geojsonData => {
+            geojson = L.geoJson(geojsonData, {
+                style: style,
+                onEachFeature: onEachFeature
+            }).addTo(map);
+        });
+})();
