@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: europe-central2-docker.pkg.dev/fbi-wanted-map-461514/fbi-repo/backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        envFrom:
+        - secretRef:
+            name: backend-secrets
+        volumeMounts:
+        - name: secrets-volume
+          mountPath: /secrets
+          readOnly: true
+      volumes:
+      - name: secrets-volume
+        secret:
+          secretName: backend-secrets

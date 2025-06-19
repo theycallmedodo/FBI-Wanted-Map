@@ -3,13 +3,15 @@ const fs = require('fs'); // do zapisu JSON do pliku
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args)); // fetch (dynamiczny import)
 const admin = require("firebase-admin"); // Firebase Admin SDK
 const serviceAccount = require("./firebase-key.json"); // klucz serwisowy do Firestore
-const statesList = require('../frontend/us-states-list.json'); // lista stanów USA
+const statesList = require('./data/us-states-list.json'); // lista stanów USA
 const crypto = require('crypto'); // do haszowania URL jako ID dokumentów
 
 // === Inicjalizacja Firestore ===
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+}
 const db = admin.firestore();
 
 // === Konfiguracja ===
